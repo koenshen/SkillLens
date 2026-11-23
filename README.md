@@ -93,6 +93,18 @@ SkillLens ships integrations for five benchmarks. Each one has its own README wi
 
 For all benchmarks, the held-out test split is committed under `data/test_pool/<benchmark>/`.
 
+### Fixed SearchQA workflow
+
+Run `python -m skilllens.searchqa --check` from this checkout to verify the 400 train, 200 validation and 1,400 test IDs offline. The default data directory is `../SkillOpt/data/searchqa_split`. Use `--split-dir` or `SEARCHQA_SPLIT_DIR` to point to the same three JSON files elsewhere. The runner and scorer use only SkillLens code.
+
+After installing the normal SkillLens dependencies and configuring the model, the full workflow is:
+
+```bash
+python -m skilllens.searchqa --output runs/searchqa-original
+```
+
+SkillLens answers the train questions without a skill, converts all scored responses to trajectories, and uses the SEAL-0 parallel **extraction configuration** (all trajectories, groups of 10, one skill of up to 3,000 characters). The frozen skill is evaluated once on validation and once on test. Each split writes `results.jsonl` and `eval_summary.json` with EM and token F1 over all items. The default is GPT-5.4 on Azure. To use a chat-completions endpoint configure `OPENAI_BASE_URL` and `OPENAI_API_KEY`, then add `--provider openai --api-style chat --target-model MODEL --extract-model MODEL`.
+
 
 ## ⚙️ Configuration
 
