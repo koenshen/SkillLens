@@ -108,6 +108,51 @@ SkillLens answers the train questions without a skill, converts all scored respo
 For the fixed SearchQA comparison, export `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, and `OPENAI_COMPATIBLE_MODEL` to use the same Chat Completions deployment for answering and skill extraction. Set `TARGET_OPENAI_COMPATIBLE_MAX_TOKENS=131072` and `OPTIMIZER_OPENAI_COMPATIBLE_MAX_TOKENS=131072` for the two output budgets. Set `SKILLOPT_WORKERS=24` for train/dev/test answering. The parallel extraction settings still come from the original SEAL-0 YAML.
 
 
+#### CPU tmux run (2026-11-24, original baseline)
+
+Run this block in Bash on `ssh cpu` with `OPENAI_COMPATIBLE_API_KEY` supplied in the environment. The private tmux server inherits the key. The command reserves a fresh result directory and records the checked-out commit and process exit status. For a repeat, choose a fresh run label in both occurrences of `20261124-r1`.
+
+```bash
+# CPU tmux launch (20261124-r1)
+(
+  set -eu
+  : "${OPENAI_COMPATIBLE_API_KEY:?Supply the TokenHub API key in the CPU shell}"
+  export OPENAI_COMPATIBLE_API_KEY
+  repo=/mnt/sdd3/xuancheng/code/github/SkillLens
+  session=sq-original-skilllens
+  root="$HOME/searchqa-original-runs/20261124-r1/skilllens"
+  if tmux -L "$session" list-sessions >/dev/null 2>&1; then
+    echo "The dedicated tmux server $session is already running" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$root")"
+  mkdir "$root"
+  tmux -L "$session" new-session -d -s "$session" -c "$repo" bash -c '
+    set -u
+    root="$HOME/searchqa-original-runs/20261124-r1/skilllens"
+    exec >"$root/console.log" 2>&1
+    export OPENAI_COMPATIBLE_BASE_URL=https://tokenhub.sensetime.com/v1
+    export OPENAI_COMPATIBLE_MODEL=deepseek-v4.1-flash-1017/huoshan_L/sfc
+    export TARGET_OPENAI_COMPATIBLE_MAX_TOKENS=131072
+    export OPTIMIZER_OPENAI_COMPATIBLE_MAX_TOKENS=131072
+    export SKILLOPT_WORKERS=24
+    printf "Started %s | SkillLens %s | model %s | answer workers %s\n" "$(date -Is)" "$(git rev-parse HEAD)" "$OPENAI_COMPATIBLE_MODEL" "$SKILLOPT_WORKERS"
+    "$HOME/miniconda3/envs/rdagent/bin/python" -B -u -m skilllens.searchqa \
+      --split-dir /mnt/sdd3/xuancheng/code/github/SkillOpt/data/searchqa_split \
+      --extract-config configs/examples/seal0_parallel.yaml \
+      --provider openai --api-style chat --workers "$SKILLOPT_WORKERS" \
+      --target-model "$OPENAI_COMPATIBLE_MODEL" --extract-model "$OPENAI_COMPATIBLE_MODEL" \
+      --output "$root/results"
+    rc=$?
+    printf "%s\n" "$rc" > "$root/exit_code"
+    exit "$rc"
+  '
+)
+```
+
+Inspect the session with `tmux -L sq-original-skilllens ls` and follow `$HOME/searchqa-original-runs/20261124-r1/skilllens/console.log`. The extractor uses the native SEAL-0 YAML (`temperature=1`, medium reasoning effort, all 400 trajectories in one batch, map concurrency 32, merge groups of 10, up to three modes per trajectory, one skill of up to 3,000 characters). The frozen skill's validation and test metrics are in `results/val/eval_summary.json` and `results/test/eval_summary.json`.
+
+
 ## ⚙️ Configuration
 
 YAML configs (`configs/example.yaml`, `configs/examples/*.yaml`) describe each extraction run:
