@@ -38,10 +38,10 @@ def _add_extract_args(parser: argparse.ArgumentParser) -> None:
                         help="Enable verbose (DEBUG) logging.")
 
 
-async def _run_extract(args: argparse.Namespace) -> None:
+async def _run_extract(args: argparse.Namespace, *, model_overrides: dict | None = None) -> None:
     """Execute the extraction pipeline."""
     # Build config
-    cli_overrides: dict = {}
+    cli_overrides: dict = dict(model_overrides or {})
     for item in args.set:
         if "=" in item:
             k, v = item.split("=", 1)
@@ -55,7 +55,7 @@ async def _run_extract(args: argparse.Namespace) -> None:
         cli_overrides["extraction.include_feedback"] = str(args.include_feedback).lower()
 
     cfg = build_config(yaml_path=args.config, cli_overrides=cli_overrides)
-    logger.debug("Resolved config:\n%s", cfg.model_dump_json(indent=2))
+    logger.debug("Resolved config:\n%s", cfg.model_dump_json(indent=2, exclude={"llm": {"api_key"}}))
 
     # Load trajectories
     input_path = Path(cfg.input.path)

@@ -77,20 +77,41 @@ def train_trajectories(items, results, target):
     return trajectories
 
 
+def model_overrides(args, role):
+    """Resolve the SearchQA model for answering or skill extraction."""
+    model = args.target_model if role == "target" else args.extract_model
+    base_url = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
+    provider = args.provider or ("openai" if base_url else None)
+    settings = {}
+    if base_url and provider == "openai":
+        settings["llm.base_url"] = base_url
+        if key := os.environ.get("OPENAI_COMPATIBLE_API_KEY"):
+            settings["llm.api_key"] = key
+        model = model or os.environ.get("OPENAI_COMPATIBLE_MODEL")
+        raw = os.environ.get(f"{role.upper()}_OPENAI_COMPATIBLE_MAX_TOKENS")
+        if raw:
+            limit = int(raw)
+            if limit < 1:
+                raise ValueError(f"{role} max tokens must be positive")
+            settings["llm.max_tokens"] = limit
+    if provider:
+        settings["llm.provider"] = provider
+    api_style = args.api_style or ("chat" if base_url and provider == "openai" else None)
+    if api_style:
+        settings["llm.api_style"] = api_style
+    if model:
+        settings["llm.model"] = model
+    return settings
+
+
 async def run(args, splits):
     from skilllens.cli.extract import _add_extract_args, _run_extract
     from skilllens.client.openai_client import LLMClient
     from skilllens.config import build_config
     from skilllens.inference.seal0.run import _render_skill_to_file
 
-    overrides = {}
-    if args.provider:
-        overrides["llm.provider"] = args.provider
-    if args.api_style:
-        overrides["llm.api_style"] = args.api_style
-    target_config = build_config(args.extract_config, {
-        **overrides, **({"llm.model": args.target_model} if args.target_model else {})
-    }).llm
+    target_config = build_config(args.extract_config, model_overrides(args, "target")).llm
+    extraction_overrides = model_overrides(args, "optimizer")
     client = LLMClient(target_config)
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -103,13 +124,9 @@ async def run(args, splits):
     extract_out = out / "extraction"
     extract_args = ["--config", str(args.extract_config), "--input", str(pool),
                     "--output", str(extract_out), "--set", "input.benchmark=searchqa"]
-    if args.extract_model:
-        overrides["llm.model"] = args.extract_model
-    for key, value in overrides.items():
-        extract_args.extend(["--set", f"{key}={value}"])
     extract_parser = argparse.ArgumentParser()
     _add_extract_args(extract_parser)
-    await _run_extract(extract_parser.parse_args(extract_args))
+    await _run_extract(extract_parser.parse_args(extract_args), model_overrides=extraction_overrides)
     artifacts = list((extract_out / "searchqa").glob("*/skill_set.json"))
     if len(artifacts) != 1:
         raise RuntimeError(f"Expected one SkillLens extraction output, found {len(artifacts)}")
@@ -126,7 +143,7 @@ def main(argv=None):
         "SEARCHQA_SPLIT_DIR", REPO.parent / "SkillOpt/data/searchqa_split")))
     parser.add_argument("--check", action="store_true", help="Validate the fixed IDs offline and exit")
     parser.add_argument("--output", type=Path, help="New directory for this run")
-    parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument("--workers", type=int, default=os.environ.get("SKILLOPT_WORKERS", "16"))
     parser.add_argument("--extract-config", type=Path, default=REPO / "configs/examples/seal0_parallel.yaml")
     parser.add_argument("--target-model", help="Override the answering model from the config")
     parser.add_argument("--extract-model", help="Override the extraction model from the config")

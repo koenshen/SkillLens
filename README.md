@@ -105,6 +105,8 @@ python -m skilllens.searchqa --output runs/searchqa-original
 
 SkillLens answers the train questions without a skill, converts all scored responses to trajectories, and uses the SEAL-0 parallel **extraction configuration** (all trajectories, groups of 10, one skill of up to 3,000 characters). The frozen skill is evaluated once on validation and once on test. Each split writes `results.jsonl` and `eval_summary.json` with EM and token F1 over all items. The default is GPT-5.4 on Azure. To use a chat-completions endpoint configure `OPENAI_BASE_URL` and `OPENAI_API_KEY`, then add `--provider openai --api-style chat --target-model MODEL --extract-model MODEL`.
 
+For the fixed SearchQA comparison, export `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, and `OPENAI_COMPATIBLE_MODEL` to use the same Chat Completions deployment for answering and skill extraction. Set `TARGET_OPENAI_COMPATIBLE_MAX_TOKENS=131072` and `OPTIMIZER_OPENAI_COMPATIBLE_MAX_TOKENS=131072` for the two output budgets. Set `SKILLOPT_WORKERS=24` for train/dev/test answering. The parallel extraction settings still come from the original SEAL-0 YAML.
+
 
 ## ⚙️ Configuration
 
