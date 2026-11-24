@@ -1,4 +1,4 @@
-"""Fixed SearchQA data contract, single-turn input and SQuAD-style metrics."""
+"""Fixed benchmark manifests and the open-book QA input and metrics."""
 from __future__ import annotations
 
 from collections import Counter
@@ -17,17 +17,40 @@ SPLITS = {
 }
 
 
-def load_splits(directory: Path) -> dict[str, list[dict]]:
+FIXED_SPLITS = {
+    "searchqa": SPLITS,
+    "triviaqa": {
+        "train": (1600, "f465cbaea5820ac4a01a9d0f5d6dc6b71668a78bf21cf783c687e3f181ac3445"),
+        "val": (200, "c2b8957c0814fc54e381821f2efb6af200bae1e26605304ca3bac7c10747176c"),
+        "test": (1000, "34c26854b2b9348c90fb740675bf45562937c1525f5a770824474e0b6df6397c"),
+    },
+    "hotpotqa": {
+        "train": (1600, "925adec60c7d1488b925b5c5facaaeb9b0f2d60b155928db809fde778433a6d9"),
+        "val": (200, "9022dabfa5ddd7a7df3a32eee1a8abbab8963ea807013f257dbefb1250d3d82b"),
+        "test": (1000, "7b81664c3206ab4a9d4e3bd274a7bbe7b7d09976c74918970a02ecbb463b7439"),
+    },
+    "bird": {
+        "train": (834, "bf49ab424f7627116e654bb8719fdee322031a35da199aa04b6c370ae0c281b3"),
+        "val": (200, "2b3ab585858e168cb05ab1cf2ce8ceb4ecd24a4ae2d375d89ba9d94a362b19d1"),
+        "test": (500, "706fcd80ba2577502ed013f49f22ceac5071af0dbfe58adb6fe22ee030b2487f"),
+    },
+}
+
+
+def load_splits(directory: Path, benchmark: str = "searchqa") -> dict[str, list[dict]]:
     splits = {}
-    for name, (count, expected_hash) in SPLITS.items():
+    for name, (count, expected_hash) in FIXED_SPLITS[benchmark].items():
         path = directory / name / "items.json"
         rows = json.loads(path.read_text(encoding="utf-8"))
         digest = hashlib.sha256("\n".join(row["id"] for row in rows).encode()).hexdigest()
         if len(rows) != count or digest != expected_hash:
             raise ValueError(f"{path} does not match the fixed {count} {name} question IDs")
         for row in rows:
-            if not all(isinstance(row.get(k), str) and row[k].strip() for k in ("question", "context")):
-                raise ValueError(f"Incomplete question or context for {name}/{row['id']}")
+            fields = ("question", "prompt", "db_id", "SQL") if benchmark == "bird" else ("question", "context")
+            if not all(isinstance(row.get(k), str) and row[k].strip() for k in fields):
+                raise ValueError(f"Incomplete {benchmark} item at {name}/{row['id']}")
+            if benchmark == "bird":
+                continue
             answers = row.get("answers")
             if not isinstance(answers, list) or not answers or not all(isinstance(a, str) for a in answers):
                 raise ValueError(f"Invalid references for {name}/{row['id']}")

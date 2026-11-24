@@ -153,6 +153,42 @@ Run this block in Bash on `ssh cpu` with `OPENAI_COMPATIBLE_API_KEY` supplied in
 Inspect the session with `tmux -L sq-original-skilllens ls` and follow `$HOME/searchqa-original-runs/20261124-r1/skilllens/console.log`. The extractor uses the native SEAL-0 YAML (`temperature=1`, medium reasoning effort, all 400 trajectories in one batch, map concurrency 32, merge groups of 10, up to three modes per trajectory, one skill of up to 3,000 characters). The frozen skill's validation and test metrics are in `results/val/eval_summary.json` and `results/test/eval_summary.json`.
 
 
+### Fixed TriviaQA, HotpotQA and BIRD
+
+The fixed runner also takes `--benchmark triviaqa`, `hotpotqa` or `bird`.
+The default remains `searchqa`. On the CPU server the runner reads
+`../SkillOpt/data/<benchmark>_split/{train,val,test}/items.json` relative to this
+checkout. Each split is checked against its ordered ID fingerprint. Override
+the data location with `--split-dir` or the benchmark's own environment
+variable, e.g. `TRIVIAQA_SPLIT_DIR`. The same model, role budgets and answer
+worker settings used above apply to all four tasks.
+
+| Task | Train / dev / test | Reported metric |
+|---|---|---|
+| TriviaQA | 1,600 / 200 / 1,000 | EM and token F1 over all reference answers |
+| HotpotQA | 1,600 / 200 / 1,000 | Answer EM and token F1 on the supplied passages |
+| BIRD | 834 / 200 / 500 | SQLite execution accuracy (EX) |
+
+From the SkillLens repository root, use a fresh output path for each run:
+
+```bash
+python -m skilllens.searchqa --benchmark triviaqa --check
+python -m skilllens.searchqa --benchmark triviaqa --output runs/triviaqa-original
+python -m skilllens.searchqa --benchmark hotpotqa --output runs/hotpotqa-original
+python -m skilllens.searchqa --benchmark bird --output runs/bird-original
+```
+
+For BIRD, `--db-root` or `BIRD_DB_ROOT` selects the database directory. The
+CPU default is `../bird-text-to-sql-260820/data_dev/dev_databases`. BIRD's
+`--check` verifies all required database files before any model call. The
+answering model receives the complete stored prompt. The scorer executes the
+extracted SQL and reference SQL on the same read-only database under one
+30-second deadline and compares sets of result rows. A syntax error, timeout
+or differing result counts as zero. Each phase writes `results.jsonl` and
+`eval_summary.json`; BIRD reports EX, model request errors and SQL errors
+separately. Extraction uses only training trajectories, with EX as the reward
+and SQL execution feedback. The frozen skill is evaluated on dev and test.
+
 ## ⚙️ Configuration
 
 YAML configs (`configs/example.yaml`, `configs/examples/*.yaml`) describe each extraction run:
