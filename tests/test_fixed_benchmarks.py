@@ -28,6 +28,9 @@ class FixedBenchmarksTest(unittest.TestCase):
             self.assertEqual(grade("SELECT lower(s) FROM t")["ex"], 0)
             self.assertEqual(grade("SELECT missing FROM t")["exec_status"], "error")
             self.assertEqual(grade("DELETE FROM t")["exec_status"], "error")
+            metadata = bird.score_response("SELECT name FROM pragma_table_info('t')", "SELECT 's'", db)
+            self.assertEqual(metadata["ex"], 1)
+            self.assertEqual(grade("PRAGMA query_only=OFF")["exec_status"], "error")
             attach = Path(tmp) / "other.sqlite"
             self.assertEqual(grade(f"ATTACH DATABASE '{attach}' AS other")["exec_status"], "error")
             self.assertFalse(attach.exists())

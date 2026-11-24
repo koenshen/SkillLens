@@ -42,13 +42,20 @@ def extract_sql(content: str) -> str:
     return content
 
 
-# Only result-producing reads belong in an EX evaluation. Opening the main
-# DB read-only alone would still permit attaching a second, writable database.
-_READ_ACTIONS = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE}
+# Read-only main DB and query_only protect table contents; block attaching other
+# files and changing connection settings. Metadata queries may use virtual tables.
+_METADATA_PRAGMAS = {"table_info", "table_xinfo", "table_list", "index_info", "index_xinfo",
+                     "index_list", "foreign_key_list", "database_list", "compile_options"}
 
 
-def _authorize(action, _arg1, _arg2, _database, _trigger):
-    return sqlite3.SQLITE_OK if action in _READ_ACTIONS else sqlite3.SQLITE_DENY
+def _authorize(action, arg1, arg2, _database, _trigger):
+    if action in (sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH):
+        return sqlite3.SQLITE_DENY
+    if action == sqlite3.SQLITE_PRAGMA and (arg1 or "").lower() not in _METADATA_PRAGMAS:
+        return sqlite3.SQLITE_DENY
+    if action == sqlite3.SQLITE_FUNCTION and (arg2 or "").lower() in {"load_extension", "writefile"}:
+        return sqlite3.SQLITE_DENY
+    return sqlite3.SQLITE_OK
 
 
 def score_response(response: str, gold_sql: str, database: Path, timeout: float = 30.0) -> dict:
